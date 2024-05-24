@@ -1,0 +1,204 @@
+---
+title: "Making Maps"
+author: "Morgan Fisher"
+format:
+  html: 
+    theme: zephyr
+  markdown: 
+    variant: markdown+emoji
+editor: visual
+code-fold: true
+cache: true
+warning: false
+---
+
+## 1. Mapping a continuous variable
+
+**1. (35%) Identify a continuous variable of interest to you that is distributed geographically (across U.S. states, U.S. counties, precincts within a state, countries in the world, Indian states, etc.). Try to choose a variable that is not simply a proxy for population density (see Healy’s notion of “America’s Ur-choropleths.”) Generate a thematic map/choropleth of your variable using R. Describe the patterns in your map. What story are you communicating with your map? Does the map effectively communicate your story? Why or why not?**
+
+**a. Identify a continuous variable that is distributed geographically.**
+
+The dataset I am using is called "Poverty estimates" and shows the amount of people in poverty in the US by each state.
+
+The continuous variable I am mapping is **percent_in_poverty** and shows the percentage of people in poverty by each state. For the map, we are limiting the dataset to only show values from 2021.
+
+**Citation:**
+
+Shut, Maryna. (2023). Poverty estimates [Data set]. Kaggle https://github.com/ecodan/school-shooting-data.git
+
+
+First, I am uploading my data from my .csv file:
+```{r read-data}
+library(tidyverse)
+library(janitor)
+library(dplyr)
+
+
+# read data
+poverty_data <- readr::read_csv("poverty.csv", show_col_types = FALSE)
+
+# clean up variable names
+poverty_data <- janitor::clean_names(poverty_data)
+```
+
+Next, I am filtering the data to only include values from 2021.
+```{r}
+# filter to the year 2021 & filter out the United States
+poverty_filtered <- poverty_data %>%
+  subset(year == 2021) %>%
+  subset(name != "United States") %>%
+  mutate(state_name = tolower(name)) %>%
+  select(-name)
+  
+
+
+view(poverty_filtered)
+```
+
+**b. Generate a thematic map/choropleth of your variable using R.**
+
+```{r}
+library(maps)
+library(sf)
+library(ggplot2)
+
+us_states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+
+```
+
+```{r}
+poverty_us_map <- left_join(us_states, poverty_filtered, by = c("ID" = "state_name"))
+
+#view(poverty_us_map)
+
+# Plotting the map with the poverty data
+ggplot() +
+  geom_sf(data = poverty_us_map, aes(fill = percent_in_poverty)) +
+  labs(title = "Percentage of Population in Poverty By State (2021)") +
+  scale_fill_distiller(name = "Percentage in Poverty", palette = "Spectral", direction = 1) +
+  theme_minimal()
+
+```
+
+**c. Describe the patterns in your map. What story are you communicating with your map? Does the map effectively communicate your story? Why or why not?**
+
+The map shows that poverty is more prevelant in the south, and we see less poverty in the north, especially the north east. I would say this map effectively shows differences in poverty through color yet could be more effective if the color scale was more of a gradient scale that increased in intensity with increased poverty rates. We can see this in part 3b.
+
+## 2. Mapping a different continuous variable
+
+**2. (35%) Repeat 1, but with a different geography and different continuous variable.** 
+
+**a. Identify a continuous variable that is distributed geographically.**
+
+This next dataset shows the GDP of various countries in Asia. The continuous variable I am mapping is **gdp_growth** and shows the percentage of increase in Gross Domestic Product by each country
+A continuous For the purpose of the map, we are focusing on GDP in 2020.
+
+Citation:
+
+ADB. (2023). Asian countries - GDP growth [Data set]. Kaggle https://www.kaggle.com/datasets/zsinghrahulk/asian-countries-gdp-growth
+
+
+**b. Generate a thematic map/choropleth of your variable using R.**
+
+First, I am uploading my data from my .csv file:
+```{r}
+library(tidyverse)
+library(janitor)
+library(dplyr)
+
+
+# read data
+GDP_data <- readr::read_csv("ADO 2021_A1-GDP growth.csv", show_col_types = FALSE)
+
+# clean up variable names
+GDP_data <- janitor::clean_names(GDP_data)
+
+GDP_filtered <- GDP_data %>%
+  subset(year == 2020)
+
+#view(GDP_filtered)
+```
+
+```{r}
+library(sf)
+library(rnaturalearth)
+library(maps)
+
+
+#world <- map("world", plot = FALSE, fill = TRUE)
+asia <- ne_countries(scale = "medium", continent = "Asia", returnclass = "sf")
+
+exclude <- c("Saudi Arabia", "Japan", "Iraq", "Kuwait", "United Arab Emirates", "Qatar", "Bahrain", "Oman", "Yemen", "Syria", "Lebanon", "Israel", "Jordan", "Palestine", "Turkey", "Cyprus")
+
+asia <- asia[!asia$name %in% exclude, ]
+
+#view(asia)
+
+# Plotting map
+#ggplot() +
+#  geom_sf(data = world, fill = "lightblue", color = "black") +
+#  labs(title = "Map") +
+#  theme_minimal()
+
+
+```
+
+```{r}
+gdp_asia_map <- left_join(asia, GDP_filtered, by = c("adm0_a3" = "country_code"))
+
+#view(poverty_us_map)
+
+# Plotting the map with the poverty data
+ggplot() +
+  geom_sf(data = gdp_asia_map, aes(fill = gdp_growth)) +
+  labs(title = "GDP By Country in Asia (2020)") +
+  scale_fill_distiller(name = "GDP Growth", palette = "Spectral", direction = 1) +
+  theme_minimal()
+
+```
+
+
+**c. Describe the patterns in your map. What story are you communicating with your map? Does the map effectively communicate your story? Why or why not?**
+
+The map shows that GDP growth appears to be more clustered towards East Asia, while South Asia experienced a negative GDP growth. With this divergent scale, it is clear to see the differences in countries that have GDP growth versus the countries with GDP loss which overall makes the map more effective.
+
+
+## 3. Modifying the Map
+
+**3. (30%) Modify the map in question 1 or 2 by changing the way you classify the data using colors.**
+
+**a. If you used a gradient color scheme on the original map, switch to a classed scale, and vice versa.**
+
+Using the 2021 US poverty data, we can switch from a gradient scale to a classed scale
+```{r}
+# Calculate breaks for classed scale
+breaks <- quantile(poverty_filtered$percent_in_poverty, probs = seq(0, 1, length.out = 6))
+
+# Define colors for each class
+colors <- c("#1a9641", "#a6d96a", "#ffffbf", "#fdae61", "#d7191c" )
+
+# Plotting the map with the poverty data using a classed scale
+ggplot() +
+  geom_sf(data = poverty_us_map, aes(fill = cut(percent_in_poverty, breaks = breaks))) +
+  labs(title = "Percentage of Population in Poverty By State (2021)") +
+  scale_fill_manual(name = "Percentage in Poverty", values = colors, 
+                    breaks = levels(cut(poverty_filtered$percent_in_poverty, breaks = breaks)),
+                    labels = c("7.4-9.9%", "9.9-11.8%", "11.8-13.6%", "13.6-15.7%", "15.7-19.5%")) +
+  theme_minimal()
+
+```
+
+
+**b. Repeat (3a), this time switching to a divergent scale if you used a sequential scale, and vice versa.**
+
+Using the 2020 US poverty data, we can switch from a divergent scale to a sequential scale
+
+```{r}
+ggplot() +
+  geom_sf(data = poverty_us_map, aes(fill = percent_in_poverty)) +
+  labs(title = "Percentage of Population in Poverty By State (2021)") +
+  scale_fill_distiller(name = "Percentage in Poverty", direction = 1) +
+  theme_minimal()
+
+
+```
