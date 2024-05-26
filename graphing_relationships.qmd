@@ -1,0 +1,218 @@
+---
+title: "Graphing Relationships"
+author: "Morgan Fisher"
+format: html
+editor: visual
+code-fold: true
+cache: true
+warning: false
+---
+
+## Question 1
+
+**Posted here is a data file containing presidential Democratic votes shares of the two party vote, by states (including DC), from 1980 to 2016, leipvote1980_2016wide.dta. Import that data (which is in Stata format) into R using haven and inspect it. The years run from 1980, 1984, …. , 2012, 2016.**
+
+Importing the data:
+
+```{r}
+library(haven)
+
+# Replace "your_file_path.dta" with the path to your .dta file
+voter_data1980_2016 <- read_dta("leipvote1980_2016wide.dta")
+
+
+# read data
+voter_data2020 <- readr::read_csv("us_vote_2020.csv")
+
+```
+
+**1.  Left join the 2020 election data included (“us_vote_2020.csv”) to the 1980-2016 data frame. It is also posted on the assignment page. Create a variable that measures the percent of the two pary vote won by Biden in 2020 using the dem_votes and rep_votes variables and a mutate statement.**
+
+```{r}
+library(dplyr)
+
+# joining data
+voter_data1980_2020 <- left_join(voter_data1980_2016, voter_data2020, by = c("state" = "state"))
+
+voter_data1980_2020 <- voter_data1980_2020 |>
+  #creating a new variable
+  mutate(pctdem2020 = (dem_percent / (dem_percent + rep_percent))) |>
+  #removing unwanted variables
+  select(-called, -final, -dem_votes, -rep_votes, -other_votes, -dem_percent, -rep_percent, -other_percent, -dem_this_margin, -margin_shift, -vote_change, -stateid)
+
+  
+head(voter_data1980_2020, 5)
+```
+
+**2.  Create a table of summary statistics (means, standard deviations, and number of states) for the 2016 and 2020 Democratic vote shares. Describe the overall pattern, in one sentence.**
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(gt)
+
+
+voter_data_tbl <- voter_data1980_2020|>
+  #selecting specific columns
+  select(state, pctdem2016, pctdem2020)|>
+  #summarizing by mean, sd, & count
+  summarise(mean_2016 = mean(pctdem2016), 
+            sd_2016 = sd(pctdem2016),
+            count_2016 = n(),
+            mean_2020 = mean(pctdem2020), 
+            sd_2020 = sd(pctdem2020),
+            count_2020 = n()
+            ) |>
+  #pivting longer
+  pivot_longer(cols = everything(), names_to = "Statistic", values_to = "Value") |>
+  mutate(Year = ifelse(grepl("_2016", Statistic), "2016", "2020")) |>
+  separate(Statistic, into = c("Statistic", "Year"), sep = "_") |>
+  pivot_wider(names_from = Statistic, values_from = Value)
+
+gt_tbl <- gt(voter_data_tbl) |>
+  #creating title
+  tab_header(
+    title = "2016 and 2020 Democratic Vote Share Statistics",
+    subtitle = "Mean, Standard Deviation, and Count of States") |>
+  #editing labels
+  cols_label(
+    Year = "Year",
+    mean = "Mean",
+    sd = "Standard Dev.",
+    count = "Count")
+
+gt_tbl
+```
+
+Compared to the 2020 election, the 2016 election had a lower percentage of Demoratic votes but higher variance between states.
+
+
+## Question 2 
+
+**Using the data from 1, generate a vote swing scatter plot with the 2020 Democratic percentage of the vote on the Y axis and the 2016 Democratic percentage of the vote on the X axis, labeling the points with the state names, and adding a 45 degree line to the plot using geom_abline().**
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+
+ggplot(data = voter_data1980_2020,
+            mapping = aes(x = pctdem2016, y = pctdem2020, label = state)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "blue") +
+  geom_text_repel(size = 2, nudge_x = 0, nudge_y = 0.1) +
+  labs(x = "Democratic Percentage in 2016", y = "Democratic Percentage in 2020", title = "Vote Swing Scatter Plot") +   theme_minimal()
+```
+
+**1.  Describe your graph. What is is overall pattern in the data?**
+
+There is a strong correlation between Democratic Percentage in 2016 & 2020. Also, most states have a higher democratic percentage in 2020 than they did in 2016.
+
+**2.  What challenges are created by labeling the states? Try labeling only some of the states, justifying your choice of states.**
+
+Because there are so many states and the data points are so close together, it makes it difficult to clearly label each state without overlap.
+
+**3.  Are there unusual states in the plot? If so, which ones?**
+
+Yes, District of Columbia has a far higher Democratic percentage in both 2016 & 2020 compared to all other states.
+
+**4.  Make a graph that omits Washington D.C. from the data. What effect does that have on the structure of the graph?**
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+
+data_no_dc <- voter_data1980_2020 |>
+  filter(state != "District of Columbia")
+
+ggplot(data = data_no_dc,
+            mapping = aes(x = pctdem2016, y = pctdem2020, label = state)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "blue") +
+  geom_text_repel(size = 2, nudge_x = 0, nudge_y = 0.1) +
+  labs(x = "Democratic Percentage in 2016", y = "Democratic Percentage in 2020", title = "Vote Swing Scatter Plot w/o DC") +   theme_minimal()
+```
+
+Ommiting Washington DC allows the graph to have a narrower window, and we can now see the difference of each state more prominently.
+
+
+
+
+
+## Question 3 
+
+**Again using the data from 1, filter out Washington D.C., reshape the data from wide form to long form using pivot_longer() and generate a line plot for the 50 states from 1980 to 2020, graphing percent Democratic on the y-axis and year on the x-axis. Choose a set of states that you find interesting, and emphasize those states using colors. \[Warning: the initial plots will be a bit messy because you are plotting 50 states.\]**
+
+```{r}
+data_no_dc_long <- data_no_dc |> pivot_longer(cols = starts_with("pctdem"),
+               names_to = "year",
+               values_to = "percentage_democratic",
+               names_pattern = "pctdem(.*)")
+
+
+state_colors <- c("Wyoming" = "purple", "Vermont" = "red", "Georgia" = "magenta", "Utah" = "turquoise")
+
+highlight_states <- c("Wyoming", "California", "Vermont", "West Virginia")
+data_highlighted <- data_no_dc_long %>% filter(state %in% highlight_states)
+
+
+ggplot(data = data_no_dc_long,
+            mapping = aes(x = year, y = percentage_democratic, group = state, color = state)) +
+  geom_line(size = 0.5) +
+  scale_color_manual(values = state_colors) +
+  labs(x = "Year", y = "Democratic Percentage", title = "Democratic Percentage from 1980 to 2020") +  
+  theme_minimal() +
+  geom_line(data = data_highlighted, aes(group = state, color = state), size = 0.5)
+  
+```
+
+
+**1.  Describe the overall patterns in the data over time. What central features are particularly noteworthy, and why?**
+
+States appear to have more variation from one another in their democratic percentages as time goes on.
+
+**2.  What story are you telling with your use of color to highlight a set of states?**
+
+I decided to highlight the states with the highest & lowest democratic percentage in both 1980 & 2020. This shows how a state demographics can change over time. We can see that Vermont and Utah favored Democrats more from 1980 to 2020, while Georgia and Wyoming favored Democrats less.
+
+**3.  Remember that in section 7.1, Healy faceted his election graph by the four census regions. Generate a second graph structured as before, this time faceting by census region.**
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+midwest_states <- c("Illinois", "Indiana", "Iowa", "Kansas", "Michigan", "Minnesota", "Missouri", "Nebraska", "North Dakota", "Ohio", "South Dakota", "Wisconsin")
+
+northeast_states <- c("Connecticut", "Maine", "Massachusetts", "New Hampshire", "Rhode Island", "Vermont","New Jersey", "New York", "Pennsylvania")
+
+south_states <- c("Alabama", "Arkansas", "Delaware", "Florida", "Georgia", "Kentucky", "Louisiana", "Maryland", "Mississippi", "North Carolina", "Oklahoma", "South Carolina", "Tennessee", "Texas", "Virginia", "West Virginia")
+
+west_states <- c("Alaska", "Arizona", "California", "Colorado", "Hawaii", "Idaho", "Montana", "Nevada", "New Mexico", "Oregon", "Utah", "Washington", "Wyoming")
+
+data_midwest <- data_no_dc_long %>%
+  filter(state %in% midwest_states)
+
+data_south <- data_no_dc_long %>%
+  filter(state %in% south_states)
+
+data_west <- data_no_dc_long %>%
+  filter(state %in% west_states)
+
+data_northeast <- data_no_dc_long %>%
+  filter(state %in% northeast_states)
+
+combined_data <- bind_rows(
+  data_midwest %>% mutate(region = "Midwest"),
+  data_northeast %>% mutate(region = "Northeast"),
+  data_south %>% mutate(region = "South"),
+  data_west %>% mutate(region = "West")
+)
+
+# Plotting all regions faceted
+ggplot(data = combined_data,
+       aes(x = year, y = percentage_democratic, group = state)) +
+  geom_line(size = 0.5) +
+  labs(x = "Year", y = "Democratic Percentage", title = "Democratic Percentage from 1980 to 2020") +
+  facet_wrap(~ region, nrow = 2) +
+  theme_minimal()  +
+  theme(axis.text.x = element_text(size = 6))
+```

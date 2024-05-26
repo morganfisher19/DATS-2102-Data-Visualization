@@ -1,0 +1,293 @@
+---
+title: "Final Project"
+author: "Morgan Fisher"
+format: html
+editor: visual
+code-fold: true
+cache: true
+warning: false
+---
+
+
+# Studying Gun Violence In Schools Across the United States
+
+
+## Overview
+
+For this project we will examine:
+
+-   Has gun violence in schools increased over the past 30 years?
+-   Are there states that experience more gun violence in schools?
+-   What characteristics are common in schools that experience gun violence?
+
+By answering these questions, we can get a better picture of the issue of gun violence in schools in the US to help identify solutions for decreasing gun violence.
+
+## Background
+
+The dataset I am using is titled *School Shootings US 1990-present*, and provides a comprehensive list of school shootings in the US from 1990 up until January 4, 2024.
+
+Variables to note include date of incident, location of incident, school type, and number of fatalities. Additionally, this analysis will look at the frequency of events in relation to date, location, and school types. For the purpose of this analysis, we will specifically be examining the number of fatalities and number of incidents/occurrences (the two are used interchangably) across time and location. 
+
+The data was compiled from Pah & Wikipedia.
+
+**Citations:**
+
+Cripe, D. (2024). School Shootings US 1990-present \[Data set\]. GitHub. https://github.com/ecodan/school-shooting-data.git
+
+United States Census Bureau. (April 26, 2021). Table 1. Apportionment Population and Number of Representatives by State: 2020 Census \[Data set\]. https://www2.census.gov/programs-surveys/decennial/2020/data/apportionment/apportionment-2020-table01.xlsx
+
+## Personal Background
+
+On February 27th, 2012, a school shooting occurred at my high school resulting in 6 students being shot and 3 students' deaths. While I was in 2nd grade at the time, the incident had a large impact on my community, and we still commemerate the event twelve years later.
+
+During the time, school shootings were unusual. However, in recent years mass shootings and school shootings have occurred more frequently. Despite this, the US has failed to pass gun control laws.
+
+
+```{r read-data}
+library(tidyverse)
+library(janitor)
+library(dplyr)
+
+
+# read data
+project_data <- readr::read_csv("pah_wikp_combo.csv", show_col_types = FALSE)
+
+# clean up variable names
+project_data <- janitor::clean_names(project_data)
+
+# filter out duplicates
+project_data <- project_data |>
+  filter(is.na(dupe))
+
+# remove unwanted variables & add year as variable
+project_data <- project_data |>
+  select(date, city, state, area_type, school, fatalities, wounded) |>
+  mutate(year = as.numeric(substr(date, nchar(date) - 3, nchar(date))))
+
+view(project_data)
+
+```
+
+
+## Fatalities from gun violence
+
+The numeric variable of interest we are studying is the number of fatalities resulted from various incidents ranging from 1990 to 2024.
+
+```{r make-table}
+fatalites_data <- project_data |>
+  select(fatalities) |>
+  group_by(fatalities)|>
+  summarise(count = n()) |>
+  ungroup()
+
+library(knitr)
+library(kableExtra)
+
+# kable(t(fatalites_data), caption = "Summary of Fatalities") |>
+#   kable_styling(full_width = FALSE)
+
+```
+
+Using a histogram, we can see the deaths resulted from each incident in our dataset. 
+```{r}
+library(ggplot2)
+ggplot(project_data, aes(x = fatalities)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", colour = "black") +
+  labs(x = "Number of Fatalities", y = "Fatalities Count", title = "Distribution of Fatalities")
+
+```
+
+Using a box plot, we can further examine the distribution of the data.
+```{r}
+ggplot(project_data, aes(x = '', y = fatalities)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(x = '', y = "Fatalities Count", title = "Distribution of Fatalities") +
+  scale_y_continuous(breaks = seq(0, 10, 1)) +
+  coord_cartesian(ylim = c(0, 10))
+```
+
+
+Each chart reveals that the data is highly skewed. The fatalities count for the majority of events is either 0 or 1. As the number of fatalities increases, we see less and less events occurring with such a high number of fatalities.
+
+The data also reveals many outliers as the boxplot shows any value being greater than 2 an outlier making all outliers range from 3 to 33.
+
+This shows us that most incidents of gun violence result in zero or few fatalities. Yet in rare cases, many fatalities may occur.
+
+
+## Frequency of Incidents by Location
+
+#### Frequency from 1990 to 2024
+
+Using a map of the US, we can see whether or not certain states are more likely to have incidents than others. To ensure consistency across states, we can establish an occurrence rate by dividing the amount of occurrences from 1990 to 2024 and dividing it by the population (in millions). We can plot this data on the map to compare the occurrence rates from state to state.
+```{r}
+library(maps)
+library(sf)
+library(ggplot2)
+library(readxl)
+
+# map of states
+us_states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+
+
+# population data
+population_data <- read_excel("apportionment-2020-table01.xlsx", skip = 3)
+
+colnames(population_data) <- c("state", "population")
+
+population_data <- population_data |>
+  select(state, population)
+
+occurrences_by_state <- project_data |>
+   filter(!(state %in% c("D.C.", "District of Columbia", "District Of Columbia"))) |>
+  group_by(state) |>
+  summarise(total_occurrences = n()) |>
+  ungroup()
+
+occurrences_and_population <- left_join(occurrences_by_state, population_data, by = c("state" = "state"))
+
+occurrences_and_population  <- occurrences_and_population |>
+  mutate(occurrence_rate = total_occurrences / (population / 1000000)) |>
+  mutate(state = tolower(state))
+
+#fatalities_and_population
+
+occurrences_us_map <- left_join(us_states, occurrences_and_population, by = c("ID" = "state"))
+
+ggplot() +
+  geom_sf(data = occurrences_us_map, aes(fill = occurrence_rate)) +
+  labs(title = "Occurrence Rate by State (1990 to 2024)") +
+  scale_fill_distiller(name = "Occurrence Rate", direction = 1) +
+  theme_minimal()
+
+```
+As seen by the map, occurrences aer more common in southern states, as well as Deleware and New Mexico. Fewer incidents occur in the northern states (Idaho, Montana, Dakotas, & Minnesota)
+
+#### Frequency from 2021 to 2024
+
+Using the same process, we can examine the occurrence rate in the most recent years (2021 to 2024).
+```{r}
+
+occurrences_recent <- project_data |>
+   filter(!(state %in% c("D.C.", "District of Columbia", "District Of Columbia"))) |>
+  filter(year >= 2021 & year <= 2024) |>
+  group_by(state) |>
+  summarise(total_occurrences_recent = n()) |>
+  ungroup()
+
+occurrences_and_population_recent <- left_join(occurrences_recent, population_data, by = c("state" = "state"))
+
+occurrences_and_population_recent  <- occurrences_and_population_recent |>
+  mutate(occurrence_rate = total_occurrences_recent / (population / 1000000)) |>
+  mutate(state = tolower(state))
+
+#fatalities_and_population
+
+occurrences_us_map_recent <- left_join(us_states, occurrences_and_population_recent, by = c("ID" = "state"))
+
+ggplot() +
+  geom_sf(data = occurrences_us_map_recent, aes(fill = occurrence_rate)) +
+  labs(title = "Occurrence Rate by State (2021 to 2024)") +
+  scale_fill_distiller(name = "Occurrence Rate", direction = 1) +
+  theme_minimal()
+
+```
+This chart reveals a similar pattern as the previous chart. Occurrences are more common in the South as well as New Mexico and Delaware. 
+
+Looking closer at the data, we may view Delaware as an outlier. Even though it has the highest occurrence rate, it had two incidents in the past 4 years. The occurrence rate appears high due to the small population of Delaware.  
+
+
+## Type of School Where Incident Occurred
+
+We are identifying **school** as our categorical variable. Here is the key for the dataset:
+
+-   C = college
+-   HS = high school
+-   MS = middle school
+-   ES = elementary school
+-   -  = unknown
+
+
+```{r}
+# clean up the data by removing the unknown values and renaming the other variables
+school_type_data <- project_data |>
+  filter(!is.na(school)) |>
+  filter(!grepl("-", school, fixed = TRUE)) |>
+  mutate(school = case_when(
+    school == "C" ~ "College",
+    school == "HS" ~ "High School",
+    school == "MS" ~ "Middle School",
+    school == "ES" ~ "Elementary School",
+    TRUE ~ as.character(school) ))
+
+school_order <- c("Elementary School", "Middle School", "High School", "College")
+
+school_type_data <- school_type_data |>
+  mutate(school = factor(school, levels = school_order))
+
+```
+
+#### Fatalities & Occurrences by School Type
+
+Using pie charts, we can view the distribution of incidents among the different school types. We can compare this with the distribution of fatalities amonf the different school types.
+```{r}
+school_type_table <- school_type_data |>
+  select(school) |>
+  group_by(school)|>
+  summarise(count = n()) |>
+  ungroup()
+
+
+par(mar = c(1, 1, 1, 1))
+
+percentages = round(school_type_table$count / sum(school_type_table$count) * 100)
+
+#par(mfrow = c(1, 2), mar = c(1, 1, 1, 1))
+
+piechart_1 <- pie(school_type_table$count,
+    labels = paste0(school_type_table$school, "\n", paste0("(", percentages, "%)")),
+    main = "Occurrences by School Type", cex = 0.8)
+
+school_type_table2 <- school_type_data |>
+  select(school, fatalities) |>
+  group_by(school) |>
+  summarise(fatalities_count = sum(fatalities)) |>
+  ungroup()
+
+par(mar = c(1, 1, 1, 1))
+
+percentages <- round(school_type_table2$fatalities_count / sum(school_type_table2$fatalities_count) * 100)
+
+
+piechart_2 <- pie(school_type_table2$fatalities_count,
+    labels = paste0(school_type_table2$school, "\n", paste0("(", percentages, "%)")),
+    main = "Fatalities by School Type", cex = 0.8)
+
+
+```
+The data reveals that the majority of incidents occurred in high schools (nearly 60%) while almost a quarter occurred at colleges, and a smaller amount occurring at middle schools and elementary schools.
+
+BY comparing the two charts, we can see that colleges and elementary schools had a greater share of fatalities despite having a lesser share of incidents. The data reveals that incidents at elementary schools and colleges result in more fatalities than incidents at middle schools and high schools.
+
+
+## Number of Occurrences Over Time
+
+Using a line plot, we can view the amount of occurences by year.
+```{r}
+data_over_time <- project_data |>
+  select(year) |>
+  filter(year != 2024) |>
+  group_by(year) |>
+  summarise(count = n()) |>
+  ungroup()
+
+ggplot(data_over_time, aes(x = year, y = count)) +
+  geom_line(color = "blue") +
+  geom_point(color = "blue") +
+  labs(x = "Year", y = "Number of Occurrences", title = "Occurrences Over Time (1990-2023)") +
+  theme_minimal()
+
+```
+The line plot shows high variability throughout the chart. We see peaks in 1993, 2008, 2014, & 2023.
+
+Looking at the past 4 years, the dup in 2020 can be explained by the closure of schools during the pandemic. However, since 2020, we have seen a high spike in the number of school shootings with 2022 & 2023 having record number of occurrences. While the data may be highly fluctuating from 1990 to 2020, We can see a strong increase that has occurred since 2020.
+

@@ -1,0 +1,250 @@
+---
+title: "Presentations and Tables"
+author: "Morgan Fisher"
+format:
+  revealjs:
+    theme: solarized
+    chalkboard: true
+cache: true
+editor: visual
+---
+
+## Instructions
+
+1.  Take the three maps you generated in assignment 4 and use quarto to make a quarto (RevealJS) slideshow. Include a title slide, and for each map provide a one sentence description of the map.
+
+2.  Using the gapminder data, make a table of means and standard deviations for GDP per capita and life expectancy by continent and by year, including the years 1987-2007 only. Render the table nicely using a table making package such as gt \[https://gt.rstudio.com/articles/gt.html\]
+
+
+## Map 1
+
+```{r read-data}
+library(tidyverse)
+library(janitor)
+library(dplyr)
+
+
+# read data
+poverty_data <- readr::read_csv("poverty.csv", show_col_types = FALSE)
+
+# clean up variable names
+poverty_data <- janitor::clean_names(poverty_data)
+
+# filter to the year 2021 & filter out the United States
+poverty_filtered <- poverty_data %>%
+  subset(year == 2021) %>%
+  subset(name != "United States") %>%
+  mutate(state_name = tolower(name)) %>%
+  select(-name)
+
+library(maps)
+library(sf)
+library(ggplot2)
+
+us_states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+
+poverty_us_map <- left_join(us_states, poverty_filtered, by = c("ID" = "state_name"))
+
+# Plotting the map with the poverty data
+ggplot() +
+  geom_sf(data = poverty_us_map, aes(fill = percent_in_poverty)) +
+  labs(title = "Percentage of Population in Poverty By State (2021)") +
+  scale_fill_distiller(name = "Percentage in Poverty", palette = "Spectral", direction = 1) +
+  theme_minimal()
+
+```
+
+This map shows the percentage of people in poverty by each state in 2021. The map uses a gradient color scheme and a divergent scale.
+
+## Map 2
+
+```{r}
+# Calculate breaks for classed scale
+breaks <- quantile(poverty_filtered$percent_in_poverty, probs = seq(0, 1, length.out = 6))
+
+# Define colors for each class
+colors <- c("#1a9641", "#a6d96a", "#ffffbf", "#fdae61", "#d7191c" )
+
+# Plotting the map with the poverty data using a classed scale
+ggplot() +
+  geom_sf(data = poverty_us_map, aes(fill = cut(percent_in_poverty, breaks = breaks))) +
+  labs(title = "Percentage of Population in Poverty By State (2021)") +
+  scale_fill_manual(name = "Percentage in Poverty", values = colors, 
+                    breaks = levels(cut(poverty_filtered$percent_in_poverty, breaks = breaks)),
+                    labels = c("7.4-9.9%", "9.9-11.8%", "11.8-13.6%", "13.6-15.7%", "15.7-19.5%")) +
+  theme_minimal()
+
+```
+
+This map shows the percentage of people in poverty by each state in 2021. The map uses a classed scale color scheme with a divergent scale.
+
+## Map 3
+
+```{r}
+ggplot() +
+  geom_sf(data = poverty_us_map, aes(fill = percent_in_poverty)) +
+  labs(title = "Percentage of Population in Poverty By State (2021)") +
+  scale_fill_distiller(name = "Percentage in Poverty", direction = 1) +
+  theme_minimal()
+
+```
+
+This map shows the percentage of people in poverty by each state in 2021. The map uses a gradient color scheme and a sequential scale.
+
+## Table of GDP per capita and life expectancy by continent and by year
+
+```{r}
+library(gapminder)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(gt)
+
+gapminder_tbl <- gapminder |>
+  filter(year > 1986, year < 2008) |>
+  group_by(continent, year) |>
+  summarise(lifeExp_avg = mean(lifeExp), 
+            lifeExp_sd = sd(lifeExp),
+            gdpPercap_avg = mean(gdpPercap),
+            gdpPercap_sd = sd(gdpPercap)) |> 
+  mutate(across(c(lifeExp_avg, lifeExp_sd), ~round(., 1))) |> 
+  mutate(across(c(gdpPercap_avg, gdpPercap_sd), ~round(., 0)))
+
+gapminder_tbl_pivoted <- gapminder_tbl |>
+  pivot_wider(names_from = continent,
+              values_from = c(lifeExp_avg, lifeExp_sd, gdpPercap_avg, gdpPercap_sd))
+```
+
+```{r}
+gt_tbl <- gt(gapminder_tbl_pivoted) |>
+  #creating title
+  tab_header(
+    title = "GDP Per Capita and Life Expectancy",
+    subtitle = "From 1987 to 2007") |>
+  #creating sections & subsections
+  tab_spanner(
+    label = "Africa",
+    columns = c(lifeExp_avg_Africa, lifeExp_sd_Africa)
+  )  |>
+  tab_spanner(
+    label = "Americas",
+    columns = c(lifeExp_avg_Americas, lifeExp_sd_Americas)
+  )  |>
+  tab_spanner(
+    label = "Asia",
+    columns = c(lifeExp_avg_Asia, lifeExp_sd_Asia)
+  )  |>
+  tab_spanner(
+    label = "Europe",
+    columns = c(lifeExp_avg_Europe, lifeExp_sd_Europe)
+  )  |>
+  tab_spanner(
+    label = "Oceania",
+    columns = c(lifeExp_avg_Oceania, lifeExp_sd_Oceania)
+  )  |>
+  tab_spanner(
+    label = "Life Expectancy",
+    columns = c(lifeExp_avg_Africa, lifeExp_sd_Africa, lifeExp_avg_Americas, lifeExp_sd_Americas, lifeExp_avg_Asia, lifeExp_sd_Asia, lifeExp_avg_Europe, lifeExp_sd_Europe, lifeExp_avg_Oceania,  lifeExp_sd_Oceania)
+  ) |>
+  tab_spanner(
+    label = "Africa*",
+    columns = c(gdpPercap_avg_Africa, gdpPercap_sd_Africa)
+  )  |>
+  tab_spanner(
+    label = "Americas*",
+    columns = c(gdpPercap_avg_Americas, gdpPercap_sd_Americas)
+  )  |>
+  tab_spanner(
+    label = "Asia*",
+    columns = c(gdpPercap_avg_Asia, gdpPercap_sd_Asia)
+  )  |>
+  tab_spanner(
+    label = "Europe*",
+    columns = c(gdpPercap_avg_Europe, gdpPercap_sd_Europe)
+  )  |>
+  tab_spanner(
+    label = "Oceania*",
+    columns = c(gdpPercap_avg_Oceania, gdpPercap_sd_Oceania)
+  )  |>
+  tab_spanner(
+    label = "GDP Per Capita",
+    columns = c(gdpPercap_avg_Africa, gdpPercap_sd_Africa, gdpPercap_avg_Americas, gdpPercap_sd_Americas, gdpPercap_avg_Asia, gdpPercap_sd_Asia, gdpPercap_avg_Europe, gdpPercap_sd_Europe, gdpPercap_avg_Oceania,  gdpPercap_sd_Oceania)
+  ) |>
+  #Renaming column titles
+  cols_label(
+    year = "Year",
+    lifeExp_avg_Africa = "Mean",
+    lifeExp_avg_Americas = "Mean",
+    lifeExp_avg_Asia = "Mean",
+    lifeExp_avg_Europe = "Mean",
+    lifeExp_avg_Oceania = "Mean",
+    lifeExp_sd_Africa = "SD",
+    lifeExp_sd_Americas = "SD",
+    lifeExp_sd_Asia = "SD",
+    lifeExp_sd_Europe = "SD",
+    lifeExp_sd_Oceania = "SD",
+    gdpPercap_avg_Africa = "Mean",
+    gdpPercap_avg_Americas = "Mean",
+    gdpPercap_avg_Asia = "Mean",
+    gdpPercap_avg_Europe = "Mean",
+    gdpPercap_avg_Oceania = "Mean",
+    gdpPercap_sd_Africa = "SD",
+    gdpPercap_sd_Americas = "SD",
+    gdpPercap_sd_Asia = "SD",
+    gdpPercap_sd_Europe = "SD",
+    gdpPercap_sd_Oceania = "SD"
+  )|>
+  # Adding footnotes
+  tab_footnote(
+    footnote = "Measured in years",
+    locations = cells_column_spanners(spanner = "Life Expectancy")
+  ) |>
+  tab_footnote(
+    footnote = "Measured in US dollars",
+    locations = cells_column_spanners(spanner = "GDP Per Capita")
+  )
+```
+
+```{r}
+gt_tbl <- gt_tbl |>
+  #Making every other columm gray
+  tab_style(
+    style = cell_fill(color = "gray90"),
+    locations = cells_body(
+      columns = c(lifeExp_avg_Africa, lifeExp_avg_Americas,
+                  lifeExp_avg_Asia, lifeExp_avg_Europe,
+                  lifeExp_avg_Oceania, gdpPercap_avg_Africa,
+                  gdpPercap_avg_Americas, gdpPercap_avg_Asia,
+                  gdpPercap_avg_Europe, gdpPercap_avg_Oceania))) |> 
+  #Editing column labels
+  tab_style(
+    style = cell_text(weight = "bold", color = "black"), 
+    locations = cells_column_spanners()
+  ) |> 
+  tab_style(
+    style = cell_text(weight = "normal", align = "center",, size = "13px"), 
+    locations = cells_column_labels()
+  )|> 
+  # Modifying body text
+  tab_style(
+    style = cell_text(align = "right", size = "11px"),
+    locations = cells_body() 
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold", size = "11px"),
+    locations = cells_body(columns = c(year)))
+
+#everything()[c(TRUE, FALSE)]
+
+gt_tbl
+```
+
+
+
+## Citations
+
+Shut, Maryna. (2023). Poverty estimates \[Data set\]. Kaggle https://github.com/ecodan/school-shooting-data.git
+
+ADB. (2023). Asian countries - GDP growth \[Data set\]. Kaggle https://www.kaggle.com/datasets/zsinghrahulk/asian-countries-gdp-growth
+
+FREE DATA FROM WORLD BANK VIA GAPMINDER.ORG, CC-BY LICENSE

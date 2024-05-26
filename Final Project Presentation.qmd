@@ -1,0 +1,178 @@
+---
+title: "Analysis of Gun Violence in Schools"
+subtitle: "Across the United States"
+author: "Morgan Fisher"
+format:
+  revealjs:
+    theme: solarized
+    chalkboard: true
+editor: visual
+code-fold: true
+cache: true
+---
+
+
+## Questions about the data
+
+Throughout the project we will examine:
+
+-   Has gun violence in schools increased over the past 30 years?
+-   Are there states that experience more gun violence in schools?
+-   What characteristics are common in schools that experience gun violence?
+
+
+## Incidents Throughout Time
+
+By graphing the number of incidents over time, we see large fluctuations from 1990 to 2020. However, ever since 2020, the number of incidents has largely increased with the most incidents ever recorded in 2023.
+```{r}
+library(tidyverse)
+library(janitor)
+library(dplyr)
+library(ggplot2)
+
+
+# read data
+project_data <- readr::read_csv("pah_wikp_combo.csv", show_col_types = FALSE)
+
+# clean up variable names
+project_data <- janitor::clean_names(project_data)
+
+# filter out duplicates
+project_data <- project_data |>
+  filter(is.na(dupe))
+
+# remove unwanted variables & add year as variable
+project_data <- project_data |>
+  select(date, city, state, area_type, school, fatalities, wounded) |>
+  mutate(year = as.numeric(substr(date, nchar(date) - 3, nchar(date))))
+
+data_over_time <- project_data |>
+  select(year) |>
+  filter(year != 2024) |>
+  group_by(year) |>
+  summarise(count = n()) |>
+  ungroup()
+
+ggplot(data_over_time, aes(x = year, y = count)) +
+  geom_line(color = "blue") +
+  geom_point(color = "blue") +
+  labs(x = "Year", y = "Number of Occurrences", title = "Occurrences Over Time (1990-2023)") +
+  theme_minimal()
+
+```
+
+## Occurrences by State
+
+By creating a map of occurrence rate for the US states, we see that occurrences are more likely in Southern states as well as New Mexico and Delaware
+
+```{r}
+library(maps)
+library(sf)
+library(ggplot2)
+library(readxl)
+
+# map of states
+us_states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+
+
+# population data
+population_data <- read_excel("apportionment-2020-table01.xlsx", skip = 3)
+
+colnames(population_data) <- c("state", "population")
+
+population_data <- population_data |>
+  select(state, population)
+
+occurrences_by_state <- project_data |>
+   filter(!(state %in% c("D.C.", "District of Columbia", "District Of Columbia"))) |>
+  group_by(state) |>
+  summarise(total_occurrences = n()) |>
+  ungroup()
+
+occurrences_and_population <- left_join(occurrences_by_state, population_data, by = c("state" = "state"))
+
+occurrences_and_population  <- occurrences_and_population |>
+  mutate(occurrence_rate = total_occurrences / (population / 1000000)) |>
+  mutate(state = tolower(state))
+
+#fatalities_and_population
+
+occurrences_us_map <- left_join(us_states, occurrences_and_population, by = c("ID" = "state"))
+
+ggplot() +
+  geom_sf(data = occurrences_us_map, aes(fill = occurrence_rate)) +
+  labs(title = "Occurrence Rate by State (1990 to 2024)") +
+  scale_fill_distiller(name = "Occurrence Rate", direction = 1) +
+  theme_minimal()
+
+```
+
+## Incidents by School Type
+
+High schools lead in incidents, followed by colleges, middle schools, and elementary schools. Fatalities are higher on average at elementary schools and colleges compared to middle schools and high schools.
+```{r}
+# clean up the data by removing the unknown values and renaming the other variables
+school_type_data <- project_data |>
+  filter(!is.na(school)) |>
+  filter(!grepl("-", school, fixed = TRUE)) |>
+  mutate(school = case_when(
+    school == "C" ~ "College",
+    school == "HS" ~ "High School",
+    school == "MS" ~ "Middle School",
+    school == "ES" ~ "Elementary",
+    TRUE ~ as.character(school) ))
+
+school_order <- c("Elementary", "Middle School", "High School", "College")
+
+school_type_data <- school_type_data |>
+  mutate(school = factor(school, levels = school_order))
+
+
+school_type_table <- school_type_data |>
+  select(school) |>
+  group_by(school)|>
+  summarise(count = n()) |>
+  ungroup()
+
+par(mfrow = c(1, 2), mar = c(1, 3, 3, 3))  # Set bottom margin to 2
+#par(mar = c(1, 1, 1, 1))
+
+percentages = round(school_type_table$count / sum(school_type_table$count) * 100)
+
+#par(mfrow = c(1, 2), mar = c(1, 1, 1, 1))
+
+piechart_1 <- pie(school_type_table$count,
+    labels = paste0(school_type_table$school, "\n", paste0("(", percentages, "%)")),
+    main = "Occurrences by School Type", cex = 0.8)
+
+school_type_table2 <- school_type_data |>
+  select(school, fatalities) |>
+  group_by(school) |>
+  summarise(fatalities_count = sum(fatalities)) |>
+  ungroup()
+
+#par(mar = c(1, 1, 1, 1))
+
+percentages <- round(school_type_table2$fatalities_count / sum(school_type_table2$fatalities_count) * 100)
+
+
+piechart_2 <- pie(school_type_table2$fatalities_count,
+    labels = paste0(school_type_table2$school, "\n", paste0("(", percentages, "%)")),
+    main = "Fatalities by School Type", cex = 0.8)
+
+
+```
+
+## Summary
+
+From our data, we drew the following conclusions:
+
+-   Large increase in school shootings from 2020 to 2023
+-   Southern states as well as New Mexico and Delaware experience increased incidents compared to other states
+-   The majority of incidents occur in high schools, but on average, incidents at colleges and elementary schools are more deadly
+
+Looking at these conclusions, we can start to ask questions about why these patterns are occurring and how we can use these patterns to prevent further incidents in the future.
+
+
+
+
